@@ -232,7 +232,8 @@ class BaseTransformerModel(BaseModel):
       decode_fn: Optional[DecodeFnCallable] = None,
       label_smoothing: float = 0.0,
       z_loss: float = 0.0,
-      loss_normalizing_factor: Optional[float] = None,
+      loss_normalizing_factor: Optional[Union[
+          float, int, str, losses.SpecialLossNormalizingFactor]] = None,
   ):
     self.module = module
     self._input_vocabulary = input_vocabulary
@@ -271,7 +272,9 @@ class BaseTransformerModel(BaseModel):
       dropout_rng: Optional[jnp.ndarray],
       label_smoothing: Optional[float] = None,
       z_loss: Optional[float] = None,
-      loss_normalizing_factor: Union[Optional[float], object] = _NoValueSentinel
+      loss_normalizing_factor: Union[Optional[Union[
+          float, int, str, losses.SpecialLossNormalizingFactor]],
+                                     object] = _NoValueSentinel,
   ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, MetricsMap]]:
     """Loss function used for training with a cross-entropy loss."""
 
@@ -284,7 +287,13 @@ class BaseTransformerModel(BaseModel):
       loss_normalizing_factor = self._loss_normalizing_factor
 
     logits = self._compute_logits(params, batch, dropout_rng)
-    weights = batch.get('decoder_loss_weights', None)
+
+    loss_normalizing_factor: Optional[Union[
+        float, int, str, losses.SpecialLossNormalizingFactor]]
+    (loss_normalizing_factor,
+     weights) = losses.get_loss_normalizing_factor_and_weights(
+         loss_normalizing_factor, batch)
+
     loss, z_loss, weight_sum = losses.compute_weighted_cross_entropy(
         logits,
         targets=batch['decoder_target_tokens'],

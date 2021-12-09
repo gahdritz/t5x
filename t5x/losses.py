@@ -13,7 +13,8 @@
 # limitations under the License.
 
 """Loss functions."""
-from typing import Tuple, Optional
+import enum
+from typing import Tuple, Mapping, Optional, Union
 
 from flax.training import common_utils
 import jax
@@ -149,7 +150,109 @@ def compute_weighted_cross_entropy(
   # pretty much scale invariant, so this simplifies things.
   # We don't normalize based on number of non-padding tokens in order to treat
   # each token as equally important regardless of sequence length.
-  if loss_normalizing_factor:
+  if loss_normalizing_factor is not None:
     total_loss /= loss_normalizing_factor
     total_z_loss /= loss_normalizing_factor
   return jnp.sum(total_loss), jnp.sum(total_z_loss), weight_sum
+
+
+@enum.unique
+class SpecialLossNormalizingFactor(enum.Enum):
+  """Speically calcualted loss_normalizing_factors, that are not a constant.
+
+  Attributes:
+    NUM_REAL_TARGET_TOKENS: Whether to divide the loss by the number of real
+      (non-padding) tokens in the current target batch. If
+      'decoder_loss_weights' are specified, it will be the sum of the weights.
+      Otherwise it will be the number of non-zero decoder_target_tokens.
+    AVERAGE_PER_SEQUENCE: This will first compute the per-sequence loss
+      (averaged over the number of real target tokens in the sequence), and then
+      compute the average of that over the sequences. This can be preferable to
+      NUM_REAL_TARGET_TOKENS for finetuning, because it will weigh all examples
+      equally, regardless of sequence length (which can be especially important
+      for multi-task finetuning).
+  """
+  NUM_REAL_TARGET_TOKENS = 1
+  AVERAGE_PER_SEQUENCE = 2
+
+
+def convert_special_loss_normalizing_factor_to_enum(
+    x: str) -> SpecialLossNormalizingFactor:
+  """Converts stringified version of LNF to an enum.
+
+  This is useful because gin dynamic registration does not (currently)
+  have support for enum.
+
+  Args:
+    x: stringified version of SpecialLossNormalizingFactor enum.
+
+  Returns:
+    SpecialLossNormalizingFactor enum instance.
+  """
+  x = x.upper()
+  if x == 'NUM_REAL_TARGET_TOKENS':
+    return SpecialLossNormalizingFactor.NUM_REAL_TARGET_TOKENS
+  if x == 'AVERAGE_PER_SEQUENCE':
+    return SpecialLossNormalizingFactor.AVERAGE_PER_SEQUENCE
+  raise ValueError(
+      'Could not convert string \"%s\" to SpecialLossNormalizingFactor' % x)
+
+
+def get_loss_normalizing_factor_and_weights(
+    loss_normalizing_factor: Optional[Union[float, int, str,
+                                            SpecialLossNormalizingFactor]],
+    batch: Mapping[str, jnp.ndarray]):
+  """Get the float loss_normalizing_factor and loss weights.
+
+  If loss_normalizing_factor is float or None, this will simply return the
+  input loss_normalizing_factor and batch.
+
+  If loss_normalizing_factor is a SpecialLossNormalizingFactor, it will
+  return a float loss_normalizing_factor and loss weights corresponding to
+  the special LNF. See SpecialLossNormalizingFactor for more details.
+
+  Args:
+    loss_normalizing_factor: The input LNF, which may be a float, None, or
+      SpecialLossNormalizingFactor (or a stringified SLNF).
+    batch: Input data batch.
+
+  Returns:
+    Tuple of (output_loss_normalizing_factor, loss_weights).
+    'output_loss_normalizing_factor' is a scalar float (Python float
+    or jnp float).
+    'loss_weights' is the per token loss weight JNP array.
+  """
+
+  loss_weights = batch.get('decoder_loss_weights', None)
+  if (loss_normalizing_factor is None or
+      not isinstance(loss_normalizing_factor,
+                     (str, SpecialLossNormalizingFactor))):
+    return (loss_normalizing_factor, loss_weights)
+
+  if isinstance(loss_normalizing_factor, str):
+    loss_normalizing_factor = convert_special_loss_normalizing_factor_to_enum(
+        loss_normalizing_factor)
+
+  # We could set this before the above 'if' statement, but we want to maintain
+  # exact backwards compatibility when loss_normalizing_factor is not an
+  # instance of SpecialLossNormalizingFactor.
+  #
+  # In pratice, 'loss_weights' is almost always set to 1.0 for real tokens
+  # and 0.0 in padding tokens during T5X pre-processing, which is equivalent
+  # to the code below.
+  if loss_weights is None:
+    loss_weights = jnp.asarray(batch['decoder_target_tokens'] > 0, jnp.float32)
+
+  output_normalizing_factor = None
+  if (loss_normalizing_factor ==
+      SpecialLossNormalizingFactor.NUM_REAL_TARGET_TOKENS):
+    output_normalizing_factor = jnp.sum(loss_weights)
+  elif (loss_normalizing_factor ==
+        SpecialLossNormalizingFactor.AVERAGE_PER_SEQUENCE):
+    loss_weights /= jnp.sum(loss_weights, axis=-1, keepdims=True) + 1e-3
+    output_normalizing_factor = jnp.sum(loss_weights)
+  else:
+    raise ValueError('Unsupported value of loss_normalizing_factor: %s' %
+                     str(loss_normalizing_factor))
+
+  return (output_normalizing_factor, loss_weights)
