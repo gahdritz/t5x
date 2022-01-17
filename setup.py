@@ -49,7 +49,7 @@ setuptools.setup(
         'clu @ git+https://github.com/google/CommonLoopUtils#egg=clu',
         'flax',
         'gin-config',
-        'jax[tpu]>=0.2.16',
+        'jax[tpu] @ git+https://github.com/google/jax#egg=jax',
         'numpy',
         'seqio-nightly',
         't5',
