@@ -69,11 +69,11 @@ We will elaborate in more detail [below](#a-metric-example) on how Metrics are
 practically used in T5X.
 
 In addition to CLU provided metrics like Average and Accuracy, T5X provides a
-few specialized metrics, like TimeRate and MicrobatchAdjusted. A full list of
-CLU metrics is provided at
+few specialized metrics, like TimeRate and AveragePerStep. A full list of CLU
+metrics is provided at
 [clu/metrics.py](https://github.com/google/CommonLoopUtils/tree/main/clu/metrics.py) while T5X metrics
 are listed in [t5x/metrics.py](https://github.com/google-research/t5x/tree/main/t5x/metrics.py). We
-will elaborate on specialized metrics like TimeRate and MicrobatchAdjusted
+will elaborate on specialized metrics like TimeRate and AveragePerStep
 [below](#special-t5x-metrics).
 
 Given a constructed `Metric` object, we can use a `MetricWriter` to write it in
@@ -131,7 +131,9 @@ function) are accumulated over subsequent steps (using the `merge` method).
 NOTE: Unlike in previous versions of T5X, "initial metrics" should not be
 defined, since the metrics returned from the first training step are simply used
 as the initial metrics. Specifically, the `get_initial_metrics` functions
-provided by BaseTrainer and BaseModel will be deprecated in the future.
+provided by BaseTrainer and BaseModel will be deprecated in the future. Now, the
+first metrics returned from `loss_fn` are treated as the initial metrics for
+later accumulation.
 
 Finally, in order to summarize the metrics into writable forms, we can simply
 use the following:
@@ -197,21 +199,21 @@ migration towards new-style metrics in T5X. Please help us clean it up!
 A few metrics are somewhat more complicated to use, largely due to limitations
 of the T5X training library.
 
-#### MicrobatchAdjusted
+#### AveragePerStep
 
-One such metric is `MicrobatchAdjusted`, which should be used to wrap another
-metric that involves any "per-step" or "step-per" computation, such as loss per
-step, or steps per second. This is due to the fact that while the loss function,
-where the metric is initially computed, runs once per training step, it may be
-run multiple times if we have multiple microbatches. If we have two
-microbatches, this results in the metric being initialzed twice per step. We
-need to add an adjustment for such metrics.
+When dealing with per-step metrics, use `AveragePerStep`. This could correspond
+to metrics such as loss per step. It cannot be implemented simply using a
+standard `Average` metric because the loss function, where the metric is
+initially computed, runs once per training step, while it may be run multiple
+times if we have multiple microbatches. If we have two microbatches, this
+results in the metric being initialzed twice per step. Thus, we need to add an
+adjustment for such metrics involving number of steps.
 
-For example, we need to initialize `z_loss` as follows:
+For example, we need to initialize `z_loss` and `steps_per_second` as follows:
 
 ```py
-'z_loss': MicrobatchAdjusted(
-  metric=clu_metrics.Average(total=z_loss, count=1), per_step=True)
+# steps is optional and defaults to 1.
+'z_loss': AveragePerStep.from_model_output(z_loss, steps=1)
 ```
 
 Then, later in the training loop,
@@ -235,6 +237,16 @@ Before summarization,
 [`set_time_rate_metrics_duration(metrics, duration)`](https://github.com/google-research/t5x/tree/main/t5x/metrics.py;l=209)
 is called automatically called to set the duration of time-related metrics.
 
+#### StepsPerTime
+
+This metric represents the sythesis of the above two, which can represent a
+metric such as `steps_per_second`.
+
+```py
+# steps defaults to 1
+'timing/steps_per_second': StepsPerTime(steps=1)
+```
+
 NOTE: Unless you are also overriding
 [Trainer](https://github.com/google-research/t5x/tree/main/t5x/trainer.py;l=314), you likely only
 need to worry about initializing metrics correctly, and not about making later
@@ -248,6 +260,8 @@ library by using the following instructions.
 
 1.  Remove `get_initial_metrics` from models inheriting from T5X
     [`BaseModel`](https://github.com/google-research/t5x/tree/main/t5x/models.py?q=symbol:%5CbBaseModel%5Cb).
+    Accumulation now happens automatically and initial metrics do not need to be
+    explicitly specified.
 
 2.  Ensure all metrics dicts are mappings of string name to `clu.metrics.Metric`
     object, rather than mappings of string name to scalar values. See
