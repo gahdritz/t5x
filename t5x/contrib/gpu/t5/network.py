@@ -16,11 +16,11 @@
 
 from typing import Any, Sequence
 
+import jax
 from flax import linen as nn
 from flax import struct
 import jax.numpy as jnp
 from t5x.contrib.gpu.t5 import layers
-
 
 @struct.dataclass
 class T5Config:
@@ -43,7 +43,8 @@ class T5Config:
   float32_attention_logits: bool = False
   # Whether to scale attention logits by sqrt(d_k). Default to False for adafactor
   scale_attn_logits: bool = False
-
+  # The maximum number of recycling iterations to run
+  max_recycling_iters: bool = 3
 
 class EncoderLayer(nn.Module):
   """Transformer encoder layer."""
@@ -176,11 +177,49 @@ class DecoderLayer(nn.Module):
     return z
 
 
+#class Encoder(nn.Module):
+#  """A stack of encoder layers."""
+#  config: T5Config
+#  shared_embedding: nn.Module
+#
+#  @nn.compact
+#  def __call__(self,
+#               encoder_input_tokens,
+#               encoder_mask=None,
+#               deterministic=False):
+#    cfg = self.config
+#    assert encoder_input_tokens.ndim == 2  # [batch, length]
+#    rel_emb = layers.RelativePositionBiases(
+#        num_buckets=32,
+#        max_distance=128,
+#        num_heads=cfg.num_heads,
+#        dtype=cfg.dtype,
+#        embedding_init=nn.initializers.variance_scaling(1.0, 'fan_avg',
+#                                                        'uniform'),
+#        name='relpos_bias')
+#
+#    # [batch, length] -> [batch, length, emb_dim]
+#    x = self.shared_embedding(encoder_input_tokens.astype('int32'))
+#    x = nn.Dropout(
+#        rate=cfg.dropout_rate, broadcast_dims=(-2,))(
+#            x, deterministic=deterministic)
+#    x = x.astype(cfg.dtype)
+#
+#    for lyr in range(cfg.num_encoder_layers):
+#      # [batch, length, emb_dim] -> [batch, length, emb_dim]
+#      x = EncoderLayer(
+#          config=cfg, relative_embedding=rel_emb,
+#          name=f'layers_{lyr}')(x, encoder_mask, deterministic)
+#
+#    x = layers.LayerNorm(dtype=cfg.dtype, name='encoder_norm')(x)
+#    return nn.Dropout(rate=cfg.dropout_rate)(x, deterministic=deterministic)
+
+
 class Encoder(nn.Module):
-  """A stack of encoder layers."""
+  """A stack of encoder layers, now with recycling"""
   config: T5Config
   shared_embedding: nn.Module
-
+  
   @nn.compact
   def __call__(self,
                encoder_input_tokens,
@@ -188,6 +227,18 @@ class Encoder(nn.Module):
                deterministic=False):
     cfg = self.config
     assert encoder_input_tokens.ndim == 2  # [batch, length]
+
+    # emb = self.shared_embedding(encoder_input_tokens.astype('int32'))
+    # emb = emb.astype(cfg.dtype)
+
+    recycling_head = layers.MlpBlock(
+        intermediate_dim=cfg.mlp_dim,
+        activations=cfg.mlp_activations,
+        intermediate_dropout_rate=0.,
+        dtype=cfg.dtype,
+        name='encoder_recycling_head',
+    )
+
     rel_emb = layers.RelativePositionBiases(
         num_buckets=32,
         max_distance=128,
@@ -197,21 +248,80 @@ class Encoder(nn.Module):
                                                         'uniform'),
         name='relpos_bias')
 
-    # [batch, length] -> [batch, length, emb_dim]
-    x = self.shared_embedding(encoder_input_tokens.astype('int32'))
-    x = nn.Dropout(
-        rate=cfg.dropout_rate, broadcast_dims=(-2,))(
-            x, deterministic=deterministic)
-    x = x.astype(cfg.dtype)
-
+    encoder_layers = []
     for lyr in range(cfg.num_encoder_layers):
-      # [batch, length, emb_dim] -> [batch, length, emb_dim]
-      x = EncoderLayer(
-          config=cfg, relative_embedding=rel_emb,
-          name=f'layers_{lyr}')(x, encoder_mask, deterministic)
+        encoder_layers.append(EncoderLayer(
+            config=cfg, relative_embedding=rel_emb,
+            name=f'layers_{lyr}',
+        ))
 
-    x = layers.LayerNorm(dtype=cfg.dtype, name='encoder_norm')(x)
-    return nn.Dropout(rate=cfg.dropout_rate)(x, deterministic=deterministic)
+    layer_norm = layers.LayerNorm(dtype=cfg.dtype, name='encoder_norm')
+
+    def get_prev(prev):
+        return jax.lax.stop_gradient(prev)
+
+    def recycling_iter(mdl, prev): 
+        # [batch, length] -> [batch, length, emb_dim]
+        x = mdl.shared_embedding(encoder_input_tokens.astype('int32'))
+        x = x.astype(cfg.dtype)
+
+        prev_emb = recycling_head(prev)
+        x = x + prev_emb
+        x = nn.Dropout(
+            rate=cfg.dropout_rate, broadcast_dims=(-2,),
+        )(x, deterministic=deterministic)
+         
+        for lyr in encoder_layers:
+          # [batch, length, emb_dim] -> [batch, length, emb_dim]
+          x = lyr(x, encoder_mask, deterministic)
+    
+        x = layer_norm(x)
+        return x
+  
+    # Define the while loop
+    body = lambda mdl, inp: (
+        inp[0] + 1, # pylint: disable=g-long-lambda
+        get_prev(recycling_iter(mdl, inp[1])),
+    )
+
+    # Choose a number of iterations
+    if(deterministic):
+        num_iter = cfg.max_recycling_iters
+    else:
+        recycling_rng = self.make_rng("recycling")
+        num_iter = jax.random.randint(
+            recycling_rng, 
+            [], # one scalar 
+            0, 
+            cfg.max_recycling_iters + 1,
+        )
+
+    jax.debug.print("num_iter: {num_iter}", num_iter=num_iter)
+
+    # Initialize prev
+    prev = jnp.zeros([*encoder_input_tokens.shape, cfg.emb_dim])
+    prev = prev.astype(cfg.dtype)
+
+    jax.debug.print("prev_shape: {prev_shape}", prev_shape=prev.shape)
+
+    if(not self.is_initializing()):
+        _, prev = nn.while_loop(
+            lambda _, x: x[0] < num_iter,
+            body,
+            self,
+            (0, prev),
+            broadcast_variables="params",
+            split_rngs={"params": False, "dropout": True},
+        )
+    else:
+        _, prev = body(self, (0, prev))
+
+    jax.debug.print("prev_shape: {prev_shape}", prev_shape=prev.shape)
+
+    x = recycling_iter(self, prev=prev)
+    x_dropped_out = nn.Dropout(rate=cfg.dropout_rate)(x, deterministic=deterministic)
+    
+    return x_dropped_out
 
 
 class Decoder(nn.Module):
