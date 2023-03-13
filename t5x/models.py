@@ -121,6 +121,7 @@ class BaseModel(abc.ABC):
       params: PyTreeDef,
       batch: Mapping[str, jnp.ndarray],
       dropout_rng: Optional[jax.random.KeyArray],
+      recycling_rng: Optional[jax.random.KeyArray],
   ) -> Tuple[jnp.ndarray, MetricsMap]:
     """Computes loss and metrics.
 
@@ -158,6 +159,7 @@ class BaseModel(abc.ABC):
         params=params,
         batch=batch,
         dropout_rng=None,
+        recycling_rng=None,
     )
 
   def predict_batch(self,
@@ -270,9 +272,10 @@ class BaseTransformerModel(BaseModel):
       params: PyTreeDef,
       batch: Mapping[str, jnp.ndarray],
       dropout_rng: Optional[jax.random.KeyArray],
+      recycling_rng: Optional[jax.random.KeyArray],
   ) -> Tuple[jnp.ndarray, MetricsMap]:
     """Loss function used for training with a cross-entropy loss."""
-    logits = self._compute_logits(params, batch, dropout_rng)
+    logits = self._compute_logits(params, batch, dropout_rng, recycling_rng=recycling_rng)
 
     loss_normalizing_factor: Optional[Union[
         float, int, str, losses.SpecialLossNormalizingFactor]]
@@ -414,12 +417,20 @@ class EncoderDecoderModel(BaseTransformerModel):
       params: PyTreeDef,
       batch: Mapping[str, jnp.ndarray],
       dropout_rng: Optional[jax.random.KeyArray] = None,
+      recycling_rng: Optional[jax.random.KeyArray] = None,
       mutable: flax_scope.CollectionFilter = False,
       other_variables: Optional[PyTreeDef] = None,
   ) -> Union[jnp.ndarray, Tuple[jnp.ndarray, flax_scope.FrozenVariableDict]]:
     """Computes logits via a forward pass of `self.module_cls`."""
     # Dropout is provided only for the training mode.
-    rngs = {'dropout': dropout_rng} if dropout_rng is not None else None
+    rngs = None
+    if(any([x is not None for x in [dropout_rng, recycling_rng]])):
+        rngs = {}
+        if(dropout_rng is not None):
+            rngs['dropout'] = dropout_rng
+        if(recycling_rng is not None):
+            rngs['recycling'] = recycling_rng
+    
     if other_variables is None:
       other_variables = {}
     return self.module.apply(

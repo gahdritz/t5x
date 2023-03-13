@@ -47,6 +47,7 @@ from t5x import train_state as train_state_lib
 from t5x import trainer as trainer_lib
 from t5x import utils
 import tensorflow as tf
+import wandb
 
 
 # Automatically search for gin files relative to the T5X package.
@@ -257,6 +258,11 @@ def train(
     rng = random.PRNGKey(random_seed)
 
   init_rng, trainer_rng = random.split(rng, 2)
+  
+  # I'm doing this this way because I legitimately have no idea how 
+  # multi-node randomness works and want to make sure the devices
+  # all get the same recycling RNG.
+  recycling_rng = random.PRNGKey(42)
 
   # ---------------------------------------------------------------------------
   # Initialize datasets
@@ -424,7 +430,8 @@ def train(
       train_state_axes=train_state_axes,
       eval_names=train_eval_datasets.keys(),
       summary_dir=model_dir,
-      rng=trainer_rng)
+      rng=trainer_rng,
+      rng_shared=recycling_rng)
   del train_state
 
   train_metrics = trainer.train_metrics_manager
@@ -765,6 +772,16 @@ if __name__ == '__main__':
 
   flags.DEFINE_integer('process_index', None, help='Index of this process.')
 
+  flags.DEFINE_boolean(
+      'wandb',
+      True,
+      help='Whether to upload logs to Weights and Biases.')
+
+  flags.DEFINE_string(
+      'wandb_name',
+      None,
+      help='Name for the current Weights and Biases run.')
+
 
   def main(argv: Sequence[str]):
     """Wrapper for pdb post mortems."""
@@ -775,11 +792,20 @@ if __name__ == '__main__':
     if len(argv) > 1:
       raise app.UsageError('Too many command-line arguments.')
 
+    if(FLAGS.wandb):
+        assert FLAGS.wandb_name is not None
+        wandb.init(
+            name=FLAGS.wandb_name,
+            project="recycling",
+            entity="gwa2107",
+            sync_tensorboard=True,
+            force=True,
+        )
+
     # OOM fix. Prevents TF from seeing GPUs to stop conflict with JAX.
     # This must go after InitGoogle(), which is called by
     # gin_utils.run(main).
     tf.config.experimental.set_visible_devices([], 'GPU')
-
 
     if FLAGS.multiprocess_gpu:
       logging.info(
@@ -808,3 +834,5 @@ if __name__ == '__main__':
 
 
   gin_utils.run(main)
+
+  wandb.finish()

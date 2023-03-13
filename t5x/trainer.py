@@ -412,7 +412,7 @@ class BaseTrainer(abc.ABC):
                train_state: train_state_lib.TrainState,
                partitioner: partitioning.BasePartitioner,
                eval_names: Sequence[str], summary_dir: Optional[str],
-               train_state_axes: Any, rng: Rng):
+               train_state_axes: Any, rng: Rng, rng_shared: Rng):
     """Trainer constructor.
 
     Args:
@@ -429,6 +429,7 @@ class BaseTrainer(abc.ABC):
     self._model = model
     self._train_state_axes = train_state_axes
     self._base_rng = rng
+    self._base_rng_shared = rng_shared
     self._partitioner = partitioner
     self._compiled_train_step: Optional[PartitionedTrainCallable] = None
     self._compiled_eval_steps: MutableMapping[str, PartitionedEvalCallable] = {}
@@ -468,6 +469,9 @@ class BaseTrainer(abc.ABC):
 
   def _get_step_rng(self, step: int) -> Rng:
     return jax.random.fold_in(self._base_rng, step)
+
+  def _get_step_rng_shared(self, step: int) -> Rng:
+    return jax.random.fold_in(self._base_rng_shared, step)
 
   @property
   def train_state(self):
@@ -629,6 +633,7 @@ def accumulate_grads_microbatched(
     train_state: train_state_lib.TrainState,
     batch: BatchType,
     dropout_rng: Rng,
+    recycling_rng: Rng,
     num_microbatches: Optional[int],
     data_partition_spec: PartitionSpec = PartitionSpec("data"),
 ) -> Tuple[train_state_lib.TrainState, MutableMetricMapType,
@@ -665,14 +670,18 @@ def accumulate_grads_microbatched(
   if num_microbatches is None or num_microbatches <= 1:
 
     if initial_flax_mutables is None:
-      (_, metrics), grad_accum = grad_fn(train_state.params, batch, dropout_rng)
+      (_, metrics), grad_accum = grad_fn(train_state.params, batch, dropout_rng, recycling_rng)
       flax_mutables = None
     else:
       (_, (metrics,
            flax_mutables)), grad_accum = grad_fn(train_state.params, batch,
-                                                 dropout_rng,
+                                                 dropout_rng, recycling_rng,
                                                  initial_flax_mutables)
   else:
+    assert False, (
+        "RECYCLING_RNG NOT IMPLEMENTED FOR THIS YET"
+    )
+
     assert batch_size % num_microbatches == 0, (
         "Batch size isn't divided evenly by num_microbatches.")
     microbatch_size = batch_size // num_microbatches
@@ -795,13 +804,14 @@ def train_with_lr(
     batch: BatchType,
     learning_rate: jnp.ndarray,
     dropout_rng: Rng,
+    recycling_rng: Rng,
     model: models.BaseModel,
     num_microbatches: Optional[int],
     weight_metrics_computer: Optional[WeightMetricsComputer] = None,
     data_partition_spec: PartitionSpec = PartitionSpec("data")):
   """Main training function with LR schedule."""
   grad_accum, metrics, flax_mutables = (
-      accumulate_grads_microbatched(model, train_state, batch, dropout_rng,
+      accumulate_grads_microbatched(model, train_state, batch, dropout_rng, recycling_rng,
                                     num_microbatches, data_partition_spec))
   new_train_state, metrics = apply_grads(
       train_state,
@@ -837,6 +847,7 @@ class Trainer(BaseTrainer):
                summary_dir: Optional[str],
                train_state_axes: Any,
                rng: Rng,
+               rng_shared: Rng,
                learning_rate_fn: LearningRateCallable,
                num_microbatches: Optional[int],
                weight_metrics_computer: Optional[WeightMetricsComputer] = None):
@@ -870,7 +881,9 @@ class Trainer(BaseTrainer):
         eval_names=eval_names,
         summary_dir=summary_dir,
         train_state_axes=train_state_axes,
-        rng=rng)
+        rng=rng,
+        rng_shared=rng_shared,
+    )
 
   @cached_property
   def _partitioned_train_step(self) -> PartitionedTrainCallable:
@@ -881,6 +894,7 @@ class Trainer(BaseTrainer):
           batch,
           learning_rate=self._learning_rate_fn(train_state.step),
           dropout_rng=self._get_step_rng(train_state.step),
+          recycling_rng=self._get_step_rng_shared(train_state.step),
           model=self._model,
           num_microbatches=self._num_microbatches,
           weight_metrics_computer=self._weight_metrics_computer,

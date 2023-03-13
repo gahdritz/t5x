@@ -22,18 +22,19 @@ export XLA_FLAGS="--xla_gpu_simplify_all_fp_conversions --xla_gpu_all_reduce_com
 T5X_DIR=${PWD}
 
 # Arguments
-FT_TASK=$1       # currently supported: mnli2, squad1
+FT_TASK=$1       # currently supported: mnli2, squad1, flan
 T5_SIZE=$2       # Model size (small, base, large)
 PREC="$3"        # Precision (float32, float16, bfloat16)
 NUM_GPUS=$4      # Number of GPUs (1, 2, 4, 8)
 BSIZE_PER_GPU=$5 # Batch size per GPU (varies with model size)
 LOG_DIR=$6       # Output log directory
 MODEL_DIR_LOCAL=${7:-"model_dir"}
+WANDB_RUN_NAME=$8
 MODEL_DIR=${PWD}/${MODEL_DIR_LOCAL}
-NUM_MICROBATCHES=${8:-0}
+NUM_MICROBATCHES=${9:-0}
 # If true, this will duplicate the last checkpoint in MODEL_DIR and add a date/time string. It will finetune on this directory. Useful if running many experiments on the same pretrained checkpoint.
 # Otherwise, be wary of overriding your pretrained checkpoint with the finetuned one.
-MAKE_FT_DIR=${9:-false} # 'true' or 'false'. 
+MAKE_FT_DIR=${10:-false} # 'true' or 'false'. 
 
 case $MAKE_FT_DIR in
   true)
@@ -58,6 +59,8 @@ case $FT_TASK in
     ;;
   squad1)
     ;;
+  flan)
+    ;;
   *)
     echo $FT_TASK may not be supported. Try mnli2, or squad1
     ;;
@@ -73,6 +76,7 @@ python3 -u ${T5X_DIR}/t5x/train.py \
   --gin.MODEL_DIR=\"${MODEL_DIR}\" \
   --gin.network.T5Config.dtype=\"${PREC}\" \
   --tfds_data_dir=${TFDS_DATA_DIR} \
+  --wandb_name=${WANDB_RUN_NAME} \
   --gin.train/utils.DatasetConfig.batch_size=${BSIZE} \
   --gin.trainer.Trainer.num_microbatches=${NUM_MICROBATCHES} \
   --gin.train_eval/utils.DatasetConfig.batch_size=${BSIZE} \
