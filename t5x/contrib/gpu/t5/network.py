@@ -44,7 +44,7 @@ class T5Config:
   # Whether to scale attention logits by sqrt(d_k). Default to False for adafactor
   scale_attn_logits: bool = False
   # Whether to use recycling
-  use_recycling: True
+  use_recycling: bool = True
   # The maximum number of recycling iterations to run
   max_recycling_iters: bool = 3
 
@@ -288,18 +288,18 @@ class Encoder(nn.Module):
         )
 
         # Choose a number of iterations
-        if(deterministic):
-            num_iter = cfg.max_recycling_iters
+        if(cfg.use_recycling): 
+            if(deterministic):
+                num_iter = cfg.max_recycling_iters
+            else:
+                recycling_rng = self.make_rng("recycling")
+                num_iter = jax.random.randint(
+                    recycling_rng, 
+                    [], # one scalar 
+                    0, 
+                    cfg.max_recycling_iters + 1,
+                )
         else:
-            recycling_rng = self.make_rng("recycling")
-            num_iter = jax.random.randint(
-                recycling_rng, 
-                [], # one scalar 
-                0, 
-                cfg.max_recycling_iters + 1,
-            )
-
-        if(not cfg.use_recycling):
             num_iter = 0
 
         # Initialize prev
