@@ -45,6 +45,8 @@ class T5Config:
   scale_attn_logits: bool = False
   # Whether to use recycling
   use_recycling: bool = True
+  # Whether to include an MLP for recycled content
+  use_recycling_params: bool = True
   # The maximum number of recycling iterations to run
   max_recycling_iters: bool = 3
 
@@ -225,7 +227,7 @@ class Encoder(nn.Module):
     def setup(self):
         cfg = self.config
 
-        if(cfg.use_recycling):
+        if(cfg.use_recycling and cfg.use_recycling_params):
             self.recycling_head = layers.MlpBlock(
                 intermediate_dim=cfg.mlp_dim,
                 activations=cfg.mlp_activations,
@@ -266,9 +268,11 @@ class Encoder(nn.Module):
         x = x.astype(cfg.dtype)
 
         def recycling_iter(mdl, x, prev):
-            if(cfg.use_recycling):
+            if(cfg.use_recycling and cfg.use_recycling_params):
                 prev_emb = mdl.recycling_head(prev)
                 x = x + prev_emb
+            elif(cfg.use_recycling):
+                x = x + prev
             
             x = nn.Dropout(
                 rate=cfg.dropout_rate, broadcast_dims=(-2,),
