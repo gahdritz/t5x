@@ -43,6 +43,8 @@ class T5Config:
   float32_attention_logits: bool = False
   # Whether to scale attention logits by sqrt(d_k). Default to False for adafactor
   scale_attn_logits: bool = False
+  # Whether to use recycling
+  use_recycling: True
   # The maximum number of recycling iterations to run
   max_recycling_iters: bool = 3
 
@@ -223,13 +225,14 @@ class Encoder(nn.Module):
     def setup(self):
         cfg = self.config
 
-        self.recycling_head = layers.MlpBlock(
-            intermediate_dim=cfg.mlp_dim,
-            activations=cfg.mlp_activations,
-            intermediate_dropout_rate=0.,
-            dtype=cfg.dtype,
-            name='encoder_recycling_head',
-        )
+        if(cfg.use_recycling):
+            self.recycling_head = layers.MlpBlock(
+                intermediate_dim=cfg.mlp_dim,
+                activations=cfg.mlp_activations,
+                intermediate_dropout_rate=0.,
+                dtype=cfg.dtype,
+                name='encoder_recycling_head',
+            )
 
         self.rel_emb = layers.RelativePositionBiases(
             num_buckets=32,
@@ -263,8 +266,10 @@ class Encoder(nn.Module):
         x = x.astype(cfg.dtype)
 
         def recycling_iter(mdl, x, prev):
-            prev_emb = mdl.recycling_head(prev)
-            x = x + prev_emb
+            if(cfg.use_recycling):
+                prev_emb = mdl.recycling_head(prev)
+                x = x + prev_emb
+            
             x = nn.Dropout(
                 rate=cfg.dropout_rate, broadcast_dims=(-2,),
             )(x, deterministic=deterministic)
@@ -293,6 +298,9 @@ class Encoder(nn.Module):
                 0, 
                 cfg.max_recycling_iters + 1,
             )
+
+        if(not cfg.use_recycling):
+            num_iter = 0
 
         # Initialize prev
         prev = jnp.zeros([*encoder_input_tokens.shape, cfg.emb_dim])
