@@ -7,20 +7,19 @@ from t5x import partitioning
 from t5x import utils
 import t5x.contrib.gpu.scripts_gpu.seqio_tasks
 
-include "t5x/contrib/gpu/t5/t5_1_1/small.gin"
-include 't5x/contrib/gpu/t5/t5_1_1/adamw_opt.gin'
+include "t5x/contrib/gpu/t5/t5_1_1/large.gin"
 include "t5x/contrib/gpu/t5/configs/runs/finetune_mnli.gin"
 
 utils.RestoreCheckpointConfig.assignment_map = (
-(r'state/param_states/(.*)', None),
+(r'(.*)recycling_head(.*)', None),
 )
 utils.RestoreCheckpointConfig.fallback_to_scratch = True
 
 MIXTURE_OR_TASK_NAME = "glue_mnli_v2"
 TASK_FEATURE_LENGTHS = {"inputs": 512, "targets": 16}
-TRAIN_STEPS = 1_020_001  # 1000000 pre-trained steps + 20000 fine-tuning steps.
+TRAIN_STEPS = 1_050_001  # 1000000 pre-trained steps + 50000 fine-tuning steps.
 DROPOUT_RATE = 0.1
-INITIAL_CHECKPOINT_PATH = "/n/home12/gahdritz/projects/recycling/ckpts/small"
+INITIAL_CHECKPOINT_PATH = "/n/home12/gahdritz/projects/recycling/ckpts/large"
 # `LOSS_NORMALIZING_FACTOR`: When fine-tuning a model that was pre-trained
 # using Mesh Tensorflow (e.g. the public T5 / mT5 / ByT5 models), this should be
 # set to `pretraining batch_size` * `target_token_length`. For T5 and T5.1.1:
