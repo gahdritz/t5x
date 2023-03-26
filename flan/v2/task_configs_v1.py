@@ -87,6 +87,7 @@ def rouge_fn(targets: List[List[str]],
                                            predictions)[rouge_type]
   return results
 
+
 # =============================== BoolQ ========================================
 @seqio.map_over_dataset
 def _process_boolq(example):
@@ -735,13 +736,14 @@ def _process_xsum(example):
 
 
 TASK_CONFIGS['xsum'] = TaskConfig(
-    source=seqio.TfdsDataSource(tfds_name='xsum:1.1.0', splits=SPLITS_DICT),
+    source=seqio.TfdsDataSource(tfds_name='huggingface:xsum', splits=SPLITS_DICT),
     preprocessors=[
         _process_xsum,
     ],
     postprocess_fn=None,
     metric_fns=[t5_metrics.rouge],
 )
+
 
 # ============================== squad_v1 ======================================
 @seqio.map_over_dataset

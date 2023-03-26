@@ -78,6 +78,10 @@ for task in ['FLAN', 'T0', 'CoT', 'Dialog', 'NIv2']:
       tasks = [task]
       rates = {task: 1}
 
+    # CoT, NIv2, and Dialog do not have NoOpt versions.
+    if task in ["CoT", "Dialog", "NIv2"] and "NoOpt" in setting:
+        continue
+
     mixture_name = f'{task.lower()}_{setting.lower()}'
     mixtures_utils.generate_mixture_suites(
         submixtures=tasks,
@@ -88,65 +92,3 @@ for task in ['FLAN', 'T0', 'CoT', 'Dialog', 'NIv2']:
         override_mix_name=mixture_name,
         task_suffixes=constants.TRAIN_TASK_SUFFIXES,
     )
-
-
-seqio.MixtureRegistry.add(
-    'full_flan',
-    tasks=[
-        ('flan_zsopt', 25),
-        ('flan_fsopt', 25),
-        ('flan_zsnoopt', 25),
-        ('flan_fsnoopt', 25),
-    ],
-)
-
-seqio.MixtureRegistry.add(
-    'full_t0',
-    tasks=[
-        ('t0_zsopt', 25),
-        ('t0_fsopt', 25),
-        ('t0_zsnoopt', 25),
-        ('t0_fsnoopt', 25),
-    ],
-)
-
-seqio.MixtureRegistry.add(
-    'full_cot',
-    tasks=[
-        ('cot_zsopt', 25),
-        ('cot_fsopt', 25),
-        ('cot_zsnoopt', 25),
-        ('cot_fsnoopt', 25),
-    ],
-)
-
-seqio.MixtureRegistry.add(
-    'full_dialog',
-    tasks=[
-        ('dialog_zsopt', 25),
-        ('dialog_fsopt', 25),
-        ('dialog_zsnoopt', 25),
-        ('dialog_fsnoopt', 25),
-    ],
-)
-
-seqio.MixtureRegistry.add(
-    'full_niv2',
-    tasks=[
-        ('niv2_zsopt', 25),
-        ('niv2_fsopt', 25),
-        ('niv2_zsnoopt', 25),
-        ('niv2_fsnoopt', 25),
-    ],
-)
-
-seqio.MixtureRegistry.add(
-    'the_flan_collection',
-    tasks=[
-        ('full_flan', DEFAULT_MIXTURE_RATES["FLAN"]),
-        ('full_t0', DEFAULT_MIXTURE_RATES["T0"]),
-        ('full_cot', DEFAULT_MIXTURE_RATES["CoT"]),
-        ('full_dialog', DEFAULT_MIXTURE_RATES["Dialog"]),
-        ('full_niv2', DEFAULT_MIXTURE_RATES["NIv2"]),
-    ],
-)
