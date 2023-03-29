@@ -20,6 +20,14 @@ import t5.data
 
 CACHE_DIRS = [os.path.join(os.path.dirname(__file__), 'cached_tasks')]
 
+SPLITS = {
+    "FLAN": None,
+    "T0": 5,
+    "CoT": None,
+    "Dialog": None,
+    "NIv2": None,
+}
+
 DEFAULT_OUTPUT_FEATURES = {
     'inputs':
         seqio.Feature(

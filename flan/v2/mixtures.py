@@ -91,4 +91,5 @@ for task in ['FLAN', 'T0', 'CoT', 'Dialog', 'NIv2']:
         ratio_answer_opts=opt_ratio,
         override_mix_name=mixture_name,
         task_suffixes=constants.TRAIN_TASK_SUFFIXES,
+        split=constants.SPLITS[task],
     )

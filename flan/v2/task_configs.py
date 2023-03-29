@@ -269,7 +269,6 @@ NIV2_TASK_CONFIGS = frozendict.frozendict(NIV2_TASK_CONFIGS)
 COT_II_TASK_CONFIGS = frozendict.frozendict(COT_II_TASK_CONFIGS)
 DIALOG_II_TASK_CONFIGS = frozendict.frozendict(DIALOG_II_TASK_CONFIGS)
 
-
 # =========== Define Non-Deterministic Tasks for Mixtures_utils.py ========== #
 ALL_CANDIDATE_TASK_CONFIGS = {}
 ALL_CANDIDATE_TASK_CONFIGS.update(FLAN_V0_TASK_CONFIGS)

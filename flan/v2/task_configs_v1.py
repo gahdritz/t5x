@@ -726,23 +726,23 @@ TASK_CONFIGS['samsum'] = TaskConfig(
 )
 
 
-# ============================== xsum ==========================================
-@seqio.map_over_dataset
-def _process_xsum(example):
-  return {
-      'text': example['document'],
-      'summary': example['summary'],
-  }
-
-
-TASK_CONFIGS['xsum'] = TaskConfig(
-    source=seqio.TfdsDataSource(tfds_name='huggingface:xsum', splits=SPLITS_DICT),
-    preprocessors=[
-        _process_xsum,
-    ],
-    postprocess_fn=None,
-    metric_fns=[t5_metrics.rouge],
-)
+## ============================== xsum ==========================================
+#@seqio.map_over_dataset
+#def _process_xsum(example):
+#  return {
+#      'text': example['document'],
+#      'summary': example['summary'],
+#  }
+#
+#
+#TASK_CONFIGS['xsum'] = TaskConfig(
+#    source=seqio.TfdsDataSource(tfds_name='huggingface:xsum', splits=SPLITS_DICT),
+#    preprocessors=[
+#        _process_xsum,
+#    ],
+#    postprocess_fn=None,
+#    metric_fns=[t5_metrics.rouge],
+#)
 
 
 # ============================== squad_v1 ======================================

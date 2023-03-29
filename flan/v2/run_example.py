@@ -77,7 +77,7 @@ seqio.MixtureRegistry.add(
 ##### See 3 Examples of Mixtures or Submixtures you can try
 ##############################################################
 # 1. Example use cases to use just the chain-of-thought zero-shot data:
-selected_mixture = seqio.get_mixture_or_task('cot_zsopt')
+selected_mixture = seqio.get_mixture_or_task('niv2_zsopt')
 
 # 2. Example use cases to use just all chain-of-thought templates together:
 # selected_mixture = seqio.get_mixture_or_task('cot_submix')
@@ -108,8 +108,11 @@ NUM_SAMPLES = 100
 for i, ex in enumerate(dataset.take(NUM_SAMPLES)):
     source_counter[ex["_task_source"].numpy()] += 1
     save_data.append((ex["inputs_pretokenized"].numpy().decode(),
+                      ex["inputs"].numpy(),
                       ex["targets_pretokenized"].numpy().decode()))
 
 print(f"Data Submixture Counts: {source_counter}")
 
-print(save_data[0])
+for a,b,c in save_data:
+    print(a)
+    print(b)

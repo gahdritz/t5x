@@ -174,15 +174,28 @@ def register_submixture_variants(
     ratio_answer_opts: float,
     tsuffix: str,
     mixture_name: str,
+    split: typing.Optional[int] = None
 ) -> str:
   """Creates specified permutations of mixtures for [ZS, FS] x [Opt, No-Opt]."""
+  if(split is not None):
+      submix_key, split_idx = submix_key.rsplit('_', 1)
+      split_idx = int(split_idx)
 
   def generate_submix_prefix(submix_key, zero_shot: bool, opt: bool):
     zs_token = 'zs' if zero_shot else 'fs'
     opt_token = 'opt' if opt else 'noopt'
-    return f'{UNIVERSAL_MIX_PREFIX}_{submix_key.lower()}_{zs_token}_{opt_token}'
+    prefix = f'{UNIVERSAL_MIX_PREFIX}_{submix_key.lower()}_{zs_token}_{opt_token}'
+
+    if(split is not None):
+        prefix = f"{prefix}_{split_idx}"
+
+    return prefix
 
   submix_task_names = DEFAULT_MIXTURE_TASKS[submix_key]
+
+  if(split is not None):
+      l = len(submix_task_names)
+      submix_task_names = submix_task_names[(l // split) * split_idx: (l // split) * (split_idx + 1)]
 
   # ZS Opt
   submix_zs_opt_prefix = generate_submix_prefix(
@@ -266,6 +279,7 @@ def generate_mixture_suites(
     ratio_answer_opts: float,
     override_mix_name: typing.Optional[str] = None,
     task_suffixes: typing.List[str] = TRAIN_TASK_SUFFIXES,
+    split: typing.Optional[int] = None
 ):
   """Creates a top-level Palm+Flan mixture from all specifications.
 
@@ -310,35 +324,51 @@ def generate_mixture_suites(
     raise ValueError(
         'ratio_answer_opts needs to be between 0 and 1, inclusive.')
 
-  # Create all submixtures
-  for tsuffix in task_suffixes:
-    submix_key_to_submix_name = {}
-    for submix_key in submixtures:
+  submixtures_copy = [smk for smk in submixtures]
+  submix_rates_copy = {k:v for k,v in submix_rates.items()}
+  for i in range(split if split is not None else 1):
+    if(split is not None):
+        submixtures = [f"{smk}_{i}" for smk in submixtures_copy]
+        submix_rates = {f"{k}_{i}":v for k,v in submix_rates_copy.items()}
+    else:
+        submix_rates = submix_rates_copy
 
-      automatic_submix_name = (
-          f'{UNIVERSAL_MIX_PREFIX}_{submix_key.lower()}' +
-          f'_zs({ratio_zero_shot})_opts({ratio_answer_opts})' + tsuffix)
-      submixture_variant_name = register_submixture_variants(
-          submix_key, submix_ex_caps, ratio_zero_shot, ratio_answer_opts,
-          tsuffix, automatic_submix_name)
-      submix_key_to_submix_name[submix_key] = submixture_variant_name
+    # Create all submixtures
+    for tsuffix in task_suffixes:
+      submix_key_to_submix_name = {}
+      for submix_key in submixtures:
+        automatic_submix_name = (
+            f'{UNIVERSAL_MIX_PREFIX}_{submix_key.lower()}' +
+            f'_zs({ratio_zero_shot})_opts({ratio_answer_opts})' + tsuffix)
+        submixture_variant_name = register_submixture_variants(
+            submix_key, submix_ex_caps, ratio_zero_shot, ratio_answer_opts,
+            tsuffix, automatic_submix_name, split=split)
+        submix_key_to_submix_name[submix_key] = submixture_variant_name
+  
+      assert(override_mix_name is not None)
+      automatic_mix_name = ""
+  #    ordered_task_keys = sorted([k for k in submix_key_to_submix_name.keys()])
+  #    task_str = '_'.join([
+  #        f'{k.lower()}({submix_rates[k]},{submix_ex_caps[k]})'
+  #        for k in ordered_task_keys
+  #    ])
+  #    automatic_mix_name = (f'{UNIVERSAL_MIX_PREFIX}_{task_str}' +
+  #                          f'_zs({ratio_zero_shot})_opts({ratio_answer_opts})' +
+  #                          tsuffix)
+      final_mix_name = f'{override_mix_name}{tsuffix}' if override_mix_name else automatic_mix_name
+     
+      if(split is not None):
+        final_mix_name = f"{final_mix_name}_{i}"
 
-    ordered_task_keys = sorted([k for k in submix_key_to_submix_name.keys()])
-    task_str = '_'.join([
-        f'{k.lower()}({submix_rates[k]},{submix_ex_caps[k]})'
-        for k in ordered_task_keys
-    ])
-    automatic_mix_name = (f'{UNIVERSAL_MIX_PREFIX}_{task_str}' +
-                          f'_zs({ratio_zero_shot})_opts({ratio_answer_opts})' +
-                          tsuffix)
-    final_mix_name = f'{override_mix_name}{tsuffix}' if override_mix_name else automatic_mix_name
-    # Combine submixes into one final mixture.
-    register_mixture_of_mixtures(
-        new_mix_name=final_mix_name,
-        submix_rates=[
-            (v, submix_rates[k]) for k, v in submix_key_to_submix_name.items()
-        ],
-    )
+      # Combine submixes into one final mixture.
+      register_mixture_of_mixtures(
+          new_mix_name=final_mix_name,
+          submix_rates=[
+              (v, submix_rates[k]) for k, v in submix_key_to_submix_name.items()
+          ],
+      )
+
+      print(final_mix_name)
 
 
 # Utilities used to "slice" NIv2 mixture
