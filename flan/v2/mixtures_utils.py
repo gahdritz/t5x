@@ -133,6 +133,7 @@ def register_mixture(mix_prefix: str,
       (task_name_with_template, min(mix_ex_cap, mix_rate))
       for task_name_with_template, mix_rate in task_template_ids
   ]
+
   mix = seqio.MixtureRegistry.add(
       name=final_mix_name,
       tasks=task_template_ids,
@@ -367,8 +368,6 @@ def generate_mixture_suites(
               (v, submix_rates[k]) for k, v in submix_key_to_submix_name.items()
           ],
       )
-
-      print(final_mix_name)
 
 
 # Utilities used to "slice" NIv2 mixture
