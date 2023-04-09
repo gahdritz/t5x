@@ -16,7 +16,7 @@ include "t5x/contrib/gpu/t5/configs/runs/finetune_flan.gin"
 #)
 #utils.RestoreCheckpointConfig.fallback_to_scratch = True
 
-MIXTURE_OR_TASK_NAME = "flan_2022_submix"
+MIXTURE_OR_TASK_NAME = "flan2022_submix"
 TASK_FEATURE_LENGTHS = {"inputs": 2048, "targets": 512}
 TRAIN_STEPS = 1_200_001  # 1100000 pre-trained steps + 100000 fine-tuning steps.
 DROPOUT_RATE = 0.1
