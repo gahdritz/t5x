@@ -234,7 +234,6 @@ def get_formatter(inputs_pattern, targets_pattern):
           }),
   ]
 
-
 # ============ Within a single task, apply multiple templates. =================
 def example_batch_to_list(example_batch, num_templates):
   """Convert a single batch item in a dataset to a list of items.

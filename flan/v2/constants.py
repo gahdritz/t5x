@@ -18,11 +18,9 @@ import os
 import seqio
 import t5.data
 
-CACHE_DIRS = [os.path.join(os.path.dirname(__file__), 'cached_tasks')]
-
-SPLITS = {
-    "FLAN": None,
-    "T0": 5,
+SUBMIX_SPLITS = {
+    "FLAN": 4,
+    "T0": 10,
     "CoT": None,
     "Dialog": None,
     "NIv2": None,

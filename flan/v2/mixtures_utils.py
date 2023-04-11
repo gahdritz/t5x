@@ -168,6 +168,11 @@ def check_mix_exists(mix_name: str):
   return mix_name in seqio.MixtureRegistry.names()
 
 
+def get_total_rate(mixture_name):
+     m = seqio.get_mixture_or_task(mixture_name)
+     return m.total_rate
+
+
 def register_submixture_variants(
     submix_key: str,
     submix_ex_caps: typing.Dict[str, int],
@@ -265,6 +270,11 @@ def register_submixture_variants(
       (k, s) for k, s in zip(all_submix_keys, combination_scores) if s > 0.0
   ]
 
+  # We need to forward the true rate total so we can mix the splits back together again later on
+  if(split is not None):
+        assert(len(selected_submixes) == 1)
+        selected_submixes = [(k, get_total_rate(k) * v) for k,v in selected_submixes]
+
   return register_mixture_of_mixtures(
       new_mix_name=mixture_name,
       submix_rates=selected_submixes,
@@ -358,14 +368,17 @@ def generate_mixture_suites(
   #                          tsuffix)
       final_mix_name = f'{override_mix_name}{tsuffix}' if override_mix_name else automatic_mix_name
      
+      rate_multiplier = 1
       if(split is not None):
         final_mix_name = f"{final_mix_name}_{i}"
+        assert(len(submix_key_to_submix_name) == 1)
+        rate_multiplier = get_total_rate(list(submix_key_to_submix_name.values())[0])
 
       # Combine submixes into one final mixture.
       register_mixture_of_mixtures(
           new_mix_name=final_mix_name,
           submix_rates=[
-              (v, submix_rates[k]) for k, v in submix_key_to_submix_name.items()
+              (v, rate_multiplier * submix_rates[k]) for k, v in submix_key_to_submix_name.items()
           ],
       )
 

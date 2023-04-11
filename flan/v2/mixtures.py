@@ -21,9 +21,6 @@ from flan.v2 import tasks  # pylint: disable=unused-import
 
 import seqio
 
-seqio.add_global_cache_dirs(constants.CACHE_DIRS)
-
-
 DEFAULT_MIXTURE_MAX_EXAMPLES = {
     'FLAN': 30000,
     'T0': 20000,
@@ -91,5 +88,5 @@ for task in ['FLAN', 'T0', 'CoT', 'Dialog', 'NIv2']:
         ratio_answer_opts=opt_ratio,
         override_mix_name=mixture_name,
         task_suffixes=constants.TRAIN_TASK_SUFFIXES,
-        split=constants.SPLITS[task],
+        split=constants.SUBMIX_SPLITS[task],
     )
