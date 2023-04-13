@@ -18,6 +18,7 @@ INT_FIELDS = set([
     "targets",
 ])
 
+
 def parse_examples(database, bounds_file):
     db = open(database, 'rb')
     bounds_file = open(bounds_file, 'rb')
@@ -55,8 +56,19 @@ def parse_examples(database, bounds_file):
 
 
 def main(args):
-    for f in os.listdir(args.cache_dir):
-        if(f.endswith('_bounds.db')):
+    caches = list(os.listdir(args.cache_dir))
+    caches = list(sorted(caches))
+    caches = [c for c in caches if not c.endswith('_bounds.db')]
+
+    if(args.worker_id is not None):
+        assert(args.worker_count is not None)
+        chunks = len(caches) // args.worker_count
+        caches = caches[chunks * args.worker_id: chunks * (args.worker_id + 1)]
+
+    for f in caches:
+        # Ignore half-completed records
+        if(os.path.exists(os.path.join(args.tfrecords_dir, f"{f[:-3]}_0.tfrecord"))):
+            print(f"Skipping {f}...")
             continue
 
         database = os.path.join(args.cache_dir, f)
@@ -89,13 +101,13 @@ def main(args):
             writer.write(example.SerializeToString())
 
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('cache_dir', type=str)
     parser.add_argument('tfrecords_dir', type=str)
     parser.add_argument('--examples_per_shard', type=int, default=10000)
+    parser.add_argument('--worker_id', type=int, default=None)
+    parser.add_argument('--worker_count', type=int, default=None)
     args = parser.parse_args()
 
     main(args)

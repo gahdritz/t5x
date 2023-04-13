@@ -12,7 +12,7 @@ source env_setup.sh
 
 TASK_ID=$SLURM_ARRAY_TASK_ID
 
-NAME_ARRAY=("flan_zsopt" "flan_fsopt" "flan_zsnoopt" "flan_fsnoopt" "t0_submix")
+NAME_ARRAY=("flan2021_submix" "dialog_submix" "t0_submix")
 NAME_ARRAY_LEN="${#NAME_ARRAY[@]}"
 IDX=$(($TASK_ID % $NAME_ARRAY_LEN))
 NAME="${NAME_ARRAY[$IDX]}"

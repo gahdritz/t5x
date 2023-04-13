@@ -46,34 +46,34 @@ def main(args):
             ('niv2_fsopt', 1),    # mixing weight = 50%
         ])
     
-    seqio.MixtureRegistry.add(
-        'flan2021_submix',
-        tasks=[
-            ('flan_zsopt', 1),      # mixing weight = 25%
-            ('flan_fsopt', 1),      # mixing weight = 25%
-            ('flan_zsnoopt', 1),    # mixing weight = 25%
-            ('flan_fsnoopt', 1),    # mixing weight = 25%
-        ])
+#    seqio.MixtureRegistry.add(
+#        'flan2021_submix',
+#        tasks=[
+#            ('flan_zsopt', 1),      # mixing weight = 25%
+#            ('flan_fsopt', 1),      # mixing weight = 25%
+#            ('flan_zsnoopt', 1),    # mixing weight = 25%
+#            ('flan_fsnoopt', 1),    # mixing weight = 25%
+#        ])
     
     seqio.MixtureRegistry.add(
         't0_submix',
         tasks=[
-            *[(f't0_zsopt_{i}', 1) for i in range(constants.SPLITS["T0"])],
-            *[(f't0_fsopt_{i}', 1) for i in range(constants.SPLITS["T0"])],
-            *[(f't0_zsnoopt_{i}', 1) for i in range(constants.SPLITS["T0"])],
-            *[(f't0_fsnoopt_{i}', 1) for i in range(constants.SPLITS["T0"])],
+            *[(f't0_zsopt_{i}', 1) for i in range(constants.SUBMIX_SPLITS["T0"])],
+            *[(f't0_fsopt_{i}', 1) for i in range(constants.SUBMIX_SPLITS["T0"])],
+            *[(f't0_zsnoopt_{i}', 1) for i in range(constants.SUBMIX_SPLITS["T0"])],
+            *[(f't0_fsnoopt_{i}', 1) for i in range(constants.SUBMIX_SPLITS["T0"])],
         ])
     
     # Define the Final Flan Collection Mixture
-    seqio.MixtureRegistry.add(
-        'flan2022_submix',
-        tasks=[
-            ('flan2021_submix', 0.4),  # mixing weight = 40%
-            ('t0_submix', 0.32),       # mixing weight = 32%
-            ('niv2_submix', 0.2),      # mixing weight = 20%
-            ('cot_submix', 0.05),      # mixing weight = 5%
-            ('dialog_submix', 0.03),   # mixing weight = 3%
-        ])
+#    seqio.MixtureRegistry.add(
+#        'flan2022_submix',
+#        tasks=[
+#            ('flan2021_submix', 0.4),  # mixing weight = 40%
+#            ('t0_submix', 0.32),       # mixing weight = 32%
+#            ('niv2_submix', 0.2),      # mixing weight = 20%
+#            ('cot_submix', 0.05),      # mixing weight = 5%
+#            ('dialog_submix', 0.03),   # mixing weight = 3%
+#        ])
     
     
     ##############################################################
@@ -96,11 +96,18 @@ def main(args):
 
     if(args.mixture_name == "t0_submix"):
         splits = [
-            *[f't0_zsopt_{i}' for i in range(constants.SPLITS["T0"])],
-            *[f't0_fsopt_{i}' for i in range(constants.SPLITS["T0"])],
-            *[f't0_zsnoopt_{i}' for i in range(constants.SPLITS["T0"])],
-            *[f't0_fsnoopt_{i}' for i in range(constants.SPLITS["T0"])],
+            *[f't0_fsopt_{i}' for i in range(constants.SUBMIX_SPLITS["T0"])],
         ]
+        
+        import random
+        args.mixture_name = random.choice(splits)
+
+    if(args.mixture_name == "flan2021_submix"):
+        #splits = [
+        #    *[f'flan_fsopt_{i}' for i in range(constants.SUBMIX_SPLITS["FLAN"])],
+        #    *[f'flan_fsnoopt_{i}' for i in range(constants.SUBMIX_SPLITS["FLAN"])],
+        #]
+        splits = ['flan_fsopt_2']
         
         import random
         args.mixture_name = random.choice(splits)
@@ -131,8 +138,8 @@ def main(args):
         if(i % 1000 == 0):
             print(f"{i}...")
         save_data.append(ex)
-    
-    name_base = f"new_flan_cache/{args.mixture_name}_{INPUT_SEQ_LEN}_{TARGET_SEQ_LEN}_{''.join(str(time.time()).split('.'))}"
+   
+    name_base = f"{args.cache_dir}/{args.mixture_name}_{INPUT_SEQ_LEN}_{TARGET_SEQ_LEN}_{''.join(str(time.time()).split('.'))}"
     db_filename = f"{name_base}.db"
     bounds_filename = f"{name_base}_bounds.db"
     db_file = open(db_filename, 'wb')
@@ -178,6 +185,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mixture_name", type=str)
+    parser.add_argument("cache_dir", type=str)
     parser.add_argument("--input_seq_len", type=int, default=2048)
     parser.add_argument("--target_seq_len", type=int, default=512)
     parser.add_argument("--max_examples", type=int, default=1000000)
